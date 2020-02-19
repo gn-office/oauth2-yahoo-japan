@@ -1,0 +1,38 @@
+{
+  "name": "GNOffice/oauth2-yahoo-japan",
+  "description": "Yahoo Japan (Yconnect) OAuth 2.0 Client Provider for The PHP League OAuth2-Client",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "USUI Tomoaki",
+      "email": "t.usui@gn-office.pro"
+    }
+  ],
+  "keywords": [
+    "oauth",
+    "oauth2",
+    "client",
+    "authorization",
+    "authorisation",
+    "yahoo",
+    "yahoo japan",
+    "yconnect"
+  ],
+  "require": {
+    "league/oauth2-client": "^2.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "~8.0",
+    "mockery/mockery": "~1.3"
+  },
+  "autoload": {
+    "psr-4": {
+      "GNOffice\\OAuth2\\Client\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "GNOffice\\OAuth2\\Client\\Test\\": "tests/src/"
+    }
+  }
+}

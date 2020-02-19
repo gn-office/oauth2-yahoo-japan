@@ -11,17 +11,6 @@ $provider = new YahooJapan([
 
 if (!isset($_GET['code'])) {
 
-    // 
-    $nonce = $this->random(40);
-    $_SESSION['nonce'] = $nonce;
-    $code_verifier = $this->random(100);
-    $_SESSION['code_verifier'] = $code_verifier;
-
-    // code_challenge の作成
-    $hash = hash('sha256', $code_verifier);
-    $code_challenge = $this->base64UrlEncode(pack('H*', $hash));
-    $code_challenge_method = 'S256';
-
     // Fetch the authorization URL from the provider; this returns the
     // urlAuthorize option and generates and applies any necessary parameters
     // (e.g. state).
@@ -29,6 +18,12 @@ if (!isset($_GET['code'])) {
 
     // Get the state generated for you and store it to the session.
     $_SESSION['oauth2state'] = $provider->getState();
+
+    // Get the nonce generated for you and store it to the session.
+    $_SESSION['oauth2nonce'] = $provider->getNonce();
+
+    // Get the code_verifier generated for you and store it to the session.
+    $_SESSION['oauth2code_verifier'] = $provider->getCodeVerifier();
 
     var_dump($authorizationUrl);
     exit();

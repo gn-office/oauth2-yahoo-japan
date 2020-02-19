@@ -16,6 +16,16 @@ class YahooJapan extends AbstractProvider
     protected $openid_configuration;
 
     /**
+     * @var string
+     */
+    protected $nonce;
+
+    /**
+     * @var string
+     */
+    protected $code_verifier;
+
+    /**
      * 各エンドポイントのURIとサポート機能を確認
      */
     public function discovery()
@@ -86,6 +96,66 @@ class YahooJapan extends AbstractProvider
     }
 
     /**
+     * Returns authorization parameters based on provided options.
+     *
+     * @param  array $options
+     * @return array Authorization parameters
+     */
+    protected function getAuthorizationParameters(array $options)
+    {
+        if (empty($options['state'])) {
+            $options['state'] = $this->getRandomState();
+        }
+
+        if (empty($options['scope'])) {
+            $options['scope'] = $this->getDefaultScopes();
+        }
+
+        if (empty($options['nonce'])) {
+            $options['nonce'] = $this->getRandomState();
+        }
+
+        if (empty($options['bail'])) {
+            $options['bail'] = 1;
+        }
+
+        // PKCE
+        $this->code_verifier = $this->getRandomState(80);
+
+        // code_challenge の作成
+        $hash = hash('sha256', $this->code_verifier);
+        $code_challenge = self::base64UrlEncode(pack('H*', $hash));
+        $code_challenge_method = 'S256';
+
+        $options += [
+            'code_challenge' => $code_challenge,
+            'code_challenge_method' => $code_challenge_method,
+            'response_type' => 'code',
+        ];
+
+        if (is_array($options['scope'])) {
+            $separator = $this->getScopeSeparator();
+            $options['scope'] = implode($separator, $options['scope']);
+        }
+
+        // Store the state as it may need to be accessed later on.
+        $this->state = $options['state'];
+
+        // Store the nonce as it may need to be accessed later on.
+        $this->nonce = $options['nonce'];
+
+        // Business code layer might set a different redirect_uri parameter
+        // depending on the context, leave it as-is
+        if (!isset($options['redirect_uri'])) {
+            $options['redirect_uri'] = $this->redirectUri;
+        }
+
+        $options['client_id'] = $this->clientId;
+
+        return $options;
+    }
+
+    /**
      * Checks a provider response for errors.
      *
      * @throws IdentityProviderException
@@ -110,4 +180,67 @@ class YahooJapan extends AbstractProvider
     {
         // TODO: Implement createResourceOwner() method.
     }
+
+    /**
+     * Returns the current value of the state parameter.
+     *
+     * This can be accessed by the redirect handler during authorization.
+     *
+     * @return string
+     */
+    public function getNonce()
+    {
+        return $this->nonce;
+    }
+
+    /**
+     * Returns the current value of the code_verifier parameter.
+     *
+     * This can be accessed by the redirect handler during authorization.
+     *
+     * @return string
+     */
+    public function getCodeVerifier()
+    {
+        return $this->code_verifier;
+    }
+
+    /**
+     * Base64URL エンコードする
+     * @param string $data エンコードする文字列
+     * @return string
+     */
+    public static function base64UrlEncode($data)
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    /**
+     * Base64URL デコードする
+     * @param string $data デコードする文字列
+     * @return bool|string
+     */
+    public static function base64UrlDecode($data)
+    {
+        $replaced = str_replace(array('-', '_'), array('+', '/'), $data);
+        $lack = strlen($replaced) % 4;
+        if ($lack > 0) {
+            $replaced .= str_repeat("=", 4 - $lack);
+        }
+        return base64_decode($replaced);
+    }
+
+    /**
+     * ハッシュ値を生成する
+     * @param $value
+     * @return string
+     */
+    public static function generateHash($value)
+    {
+        $hash = hash('sha256', $value, true);
+        $length = strlen($hash) / 2;
+        $half_of_hash = substr($hash, 0, $length);
+        return self::base64UrlEncode($half_of_hash);
+    }
+
 }

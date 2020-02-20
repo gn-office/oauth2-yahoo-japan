@@ -3,15 +3,16 @@
 namespace GNOffice\OAuth2\Client\Provider;
 
 use League\OAuth2\Client\Provider\AbstractProvider;
-use Psr\Http\Message\ResponseInterface;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Token\AccessToken;
 use League\OAuth2\Client\Tool\BearerAuthorizationTrait;
-use League\OAuth2\Client\Provider\ResourceOwnerInterface;
+use Psr\Http\Message\ResponseInterface;
 use GNOffice\OAuth2\Client\Provider\Exception\YahooJapanIdentityProviderException;
 
 class YahooJapan extends AbstractProvider
 {
+
+    use BearerAuthorizationTrait;
 
     protected $openid_configuration;
 
@@ -103,14 +104,7 @@ class YahooJapan extends AbstractProvider
      */
     protected function getAuthorizationParameters(array $options)
     {
-        if (empty($options['state'])) {
-            $options['state'] = $this->getRandomState();
-        }
-
-        if (empty($options['scope'])) {
-            $options['scope'] = $this->getDefaultScopes();
-        }
-
+        // nonce
         if (empty($options['nonce'])) {
             $options['nonce'] = $this->getRandomState();
         }
@@ -130,27 +124,13 @@ class YahooJapan extends AbstractProvider
         $options += [
             'code_challenge' => $code_challenge,
             'code_challenge_method' => $code_challenge_method,
-            'response_type' => 'code',
         ];
-
-        if (is_array($options['scope'])) {
-            $separator = $this->getScopeSeparator();
-            $options['scope'] = implode($separator, $options['scope']);
-        }
-
-        // Store the state as it may need to be accessed later on.
-        $this->state = $options['state'];
 
         // Store the nonce as it may need to be accessed later on.
         $this->nonce = $options['nonce'];
 
-        // Business code layer might set a different redirect_uri parameter
-        // depending on the context, leave it as-is
-        if (!isset($options['redirect_uri'])) {
-            $options['redirect_uri'] = $this->redirectUri;
-        }
-
-        $options['client_id'] = $this->clientId;
+        // 親クラスのパラメータを追加
+        $options = parent::getAuthorizationParameters($options);
 
         return $options;
     }
@@ -165,7 +145,41 @@ class YahooJapan extends AbstractProvider
      */
     protected function checkResponse(ResponseInterface $response, $data)
     {
-        // TODO: Implement checkResponse() method.
+        if ($response->getStatusCode() >= 400) {
+            throw YahooJapanIdentityProviderException::clientException($response, $data);
+        } elseif (isset($data['error'])) {
+            throw YahooJapanIdentityProviderException::oauthException($response, $data);
+        }
+    }
+
+    /**
+     * Requests an access token using a specified grant and option set.
+     *
+     * @param  mixed $grant
+     * @param  array $options
+     * @throws IdentityProviderException
+     * @return \League\OAuth2\Client\Token\AccessTokenInterface
+     */
+    public function getAccessToken($grant, array $options = [])
+    {
+        // nonce を取得
+        $nonce = $options['nonce'];
+        unset($options['nonce']);
+
+        // 親クラスでアクセストークンを取得
+        $token = parent::getAccessToken($grant, $options);
+
+        $token_values = $token->getValues();
+        $id_token = $token_values['id_token'];
+        $access_token = $token->getToken();
+
+        // アクセストークンを検証
+        if ($this->verifyToken($id_token, $access_token, $nonce)) {
+            return $token;
+        } else {
+            throw YahooJapanIdentityProviderException::invalidTokenException();
+        }
+
     }
 
     /**
@@ -174,15 +188,15 @@ class YahooJapan extends AbstractProvider
      *
      * @param  array $response
      * @param  AccessToken $token
-     * @return ResourceOwnerInterface
+     * @return YahooJapanResourceOwner
      */
     protected function createResourceOwner(array $response, AccessToken $token)
     {
-        // TODO: Implement createResourceOwner() method.
+        return new YahooJapanResourceOwner($response);
     }
 
     /**
-     * Returns the current value of the state parameter.
+     * Returns the current value of the nonce parameter.
      *
      * This can be accessed by the redirect handler during authorization.
      *
@@ -243,4 +257,85 @@ class YahooJapan extends AbstractProvider
         return self::base64UrlEncode($half_of_hash);
     }
 
+    /**
+     * トークンの検証を行う
+     * @param string $jwt 取得した ID Token(JWT)
+     * @param string $access_token 取得したアクセストークン
+     * @param string $nonce トークン取得時に設定した nonce
+     * @return bool 検証成功なら true 失敗なら false
+     */
+    private function verifyToken($jwt, $access_token, $nonce)
+    {
+        // JWT を分割
+        list($header, $payload, $signature) = explode('.', $jwt);
+
+        // Header から Key ID を取得
+        $decoded_header = json_decode($this->base64UrlDecode($header), true);
+
+        // Public Keysエンドポイントから Public Key を取得
+        $method = self::METHOD_GET;
+        $url = 'https://auth.login.yahoo.co.jp/yconnect/v2/public-keys';
+        $options = [];
+
+        $request = $this->getRequest($method, $url, $options);
+
+        $data = $this->getParsedResponse($request);
+
+        $public_key = $data[$decoded_header['kid']];
+
+        $data = $header . '.' . $payload;
+        $decoded_signature = $this->base64UrlDecode($signature);
+        $public_key_id = openssl_pkey_get_public($public_key);
+        if (!$public_key_id) {
+            // failed to get public key resource
+            return false;
+        }
+        $result = openssl_verify($data, $decoded_signature, $public_key_id, 'RSA-SHA256');
+        openssl_free_key($public_key_id);
+        if ($result !== 1) {
+            // invalid signature
+            return false;
+        }
+
+        // Payload の検証
+        $decoded_payload = json_decode($this->base64UrlDecode($payload), true);
+//        var_dump($decoded_payload);
+
+        $config = $this->discovery();
+
+        if ($decoded_payload['iss'] !== $config['issuer']) {
+            // invalid iss
+            return false;
+        }
+
+        if ($decoded_payload['aud'][0] !== $this->clientId) {
+            // invalid aud
+            return false;
+        }
+
+        if ($decoded_payload['nonce'] !== $nonce) {
+            // invalid nonce
+            return false;
+        }
+
+        // アクセストークンの検証
+        if ($decoded_payload['at_hash'] !== $this->generateHash($access_token)) {
+            // invalid access_token
+            return false;
+        }
+
+        // 有効期限の確認
+        if ($decoded_payload['exp'] < time()) {
+            // invalid exp
+            return false;
+        }
+
+        // 発行時刻の確認
+        if ($decoded_payload['iat'] < time() - 600) {
+            // invalid iat
+            return false;
+        }
+
+        return true;
+    }
 }

@@ -3,6 +3,8 @@ require_once '../vendor/autoload.php';
 
 use GNOffice\OAuth2\Client\Provider\YahooJapan;
 
+session_start();
+
 $provider = new YahooJapan([
     'clientId' => 'dj00aiZpPVFXS1Z1bG9rTEE0MiZzPWNvbnN1bWVyc2VjcmV0Jng9ZjY-',
     'clientSecret' => 'vrXYgL1ruSTFNPy9XjIEUasJmrdrMWVIVkKE45cv',
@@ -25,9 +27,6 @@ if (!isset($_GET['code'])) {
     // Get the code_verifier generated for you and store it to the session.
     $_SESSION['oauth2code_verifier'] = $provider->getCodeVerifier();
 
-    var_dump($authorizationUrl);
-    exit();
-
     // Redirect the user to the authorization URL.
     header('Location: ' . $authorizationUrl);
     exit;
@@ -44,33 +43,19 @@ if (!isset($_GET['code'])) {
 } else {
 
     try {
-
         // Try to get an access token using the authorization code grant.
         $accessToken = $provider->getAccessToken('authorization_code', [
-            'code' => $_GET['code']
+            'code' => $_GET['code'],
+            'code_verifier' => $_SESSION['oauth2code_verifier'],
+            'nonce' => $_SESSION['oauth2nonce']
         ]);
-
-        // We have an access token, which we may use in authenticated
-        // requests against the service provider's API.
-        echo 'Access Token: ' . $accessToken->getToken() . "<br>";
-        echo 'Refresh Token: ' . $accessToken->getRefreshToken() . "<br>";
-        echo 'Expired in: ' . $accessToken->getExpires() . "<br>";
-        echo 'Already expired? ' . ($accessToken->hasExpired() ? 'expired' : 'not expired') . "<br>";
 
         // Using the access token, we may look up details about the
         // resource owner.
-        $resourceOwner = $provider->getResourceOwner($accessToken);
+        $user = $provider->getResourceOwner($accessToken);
 
-        var_export($resourceOwner->toArray());
-
-        // The provider provides a way to get an authenticated API request for
-        // the service, using the access token; it returns an object conforming
-        // to Psr\Http\Message\RequestInterface.
-        $request = $provider->getAuthenticatedRequest(
-            'GET',
-            'http://brentertainment.com/oauth2/lockdin/resource',
-            $accessToken
-        );
+        // Use these details to create a new profile
+        printf('Hello %s!', $user->getName());
 
     } catch (\League\OAuth2\Client\Provider\Exception\IdentityProviderException $e) {
 
@@ -78,5 +63,8 @@ if (!isset($_GET['code'])) {
         exit($e->getMessage());
 
     }
+
+    // Use this to interact with an API on the users behalf
+    echo $accessToken->getToken();
 
 }

@@ -8,6 +8,7 @@ use League\OAuth2\Client\Token\AccessToken;
 use League\OAuth2\Client\Tool\BearerAuthorizationTrait;
 use Psr\Http\Message\ResponseInterface;
 use GNOffice\OAuth2\Client\Provider\Exception\YahooJapanIdentityProviderException;
+use GNOffice\OAuth2\Client\Provider\Exception\InvalidTokenException;
 
 class YahooJapan extends AbstractProvider
 {
@@ -157,8 +158,8 @@ class YahooJapan extends AbstractProvider
      *
      * @param  mixed $grant
      * @param  array $options
-     * @throws IdentityProviderException
      * @return \League\OAuth2\Client\Token\AccessTokenInterface
+     * @throws InvalidTokenException
      */
     public function getAccessToken($grant, array $options = [])
     {
@@ -178,7 +179,7 @@ class YahooJapan extends AbstractProvider
         if ($verify_token['is_valid']) {
             return $token;
         } else {
-            throw YahooJapanIdentityProviderException::invalidTokenException($verify_token['error']);
+            throw new InvalidTokenException($verify_token['error']);
         }
 
     }

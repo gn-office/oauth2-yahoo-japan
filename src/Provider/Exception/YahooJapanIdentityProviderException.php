@@ -28,11 +28,6 @@ class YahooJapanIdentityProviderException extends IdentityProviderException
         );
     }
 
-    public static function invalidTokenException($message = null)
-    {
-        return new \Exception($message);
-    }
-
     /**
      * @param  ResponseInterface $response
      * @param  string|null $message

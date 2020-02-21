@@ -174,10 +174,11 @@ class YahooJapan extends AbstractProvider
         $access_token = $token->getToken();
 
         // アクセストークンを検証
-        if ($this->verifyToken($id_token, $access_token, $nonce)) {
+        $verify_token = $this->verifyToken($id_token, $access_token, $nonce);
+        if ($verify_token['is_valid']) {
             return $token;
         } else {
-            throw YahooJapanIdentityProviderException::invalidTokenException();
+            throw YahooJapanIdentityProviderException::invalidTokenException($verify_token['error']);
         }
 
     }
@@ -262,7 +263,7 @@ class YahooJapan extends AbstractProvider
      * @param string $jwt 取得した ID Token(JWT)
      * @param string $access_token 取得したアクセストークン
      * @param string $nonce トークン取得時に設定した nonce
-     * @return bool 検証成功なら true 失敗なら false
+     * @return array $verify_result
      */
     private function verifyToken($jwt, $access_token, $nonce)
     {
@@ -288,54 +289,90 @@ class YahooJapan extends AbstractProvider
         $public_key_id = openssl_pkey_get_public($public_key);
         if (!$public_key_id) {
             // failed to get public key resource
-            return false;
+            $verify_result = [
+                'is_valid' => false,
+                'error' => 'Failed to get public key resource'
+            ];
+            return $verify_result;
         }
         $result = openssl_verify($data, $decoded_signature, $public_key_id, 'RSA-SHA256');
         openssl_free_key($public_key_id);
         if ($result !== 1) {
             // invalid signature
-            return false;
+            $verify_result = [
+                'is_valid' => false,
+                'error' => 'Invalid signature'
+            ];
+            return $verify_result;
         }
 
         // Payload の検証
         $decoded_payload = json_decode($this->base64UrlDecode($payload), true);
-//        var_dump($decoded_payload);
 
         $config = $this->discovery();
 
         if ($decoded_payload['iss'] !== $config['issuer']) {
-            // invalid iss
-            return false;
+            // unmatched iss
+            $verify_result = [
+                'is_valid' => false,
+                'error' => 'Unmatched iss'
+            ];
+            return $verify_result;
         }
 
         if ($decoded_payload['aud'][0] !== $this->clientId) {
-            // invalid aud
-            return false;
+            // unmatched aud
+            $verify_result = [
+                'is_valid' => false,
+                'error' => 'Unmatched aud'
+            ];
+            return $verify_result;
         }
 
         if ($decoded_payload['nonce'] !== $nonce) {
-            // invalid nonce
-            return false;
+            // unmatched nonce
+            $verify_result = [
+                'is_valid' => false,
+                'error' => 'Unmatched nonce'
+            ];
+            return $verify_result;
         }
 
         // アクセストークンの検証
         if ($decoded_payload['at_hash'] !== $this->generateHash($access_token)) {
             // invalid access_token
-            return false;
+            // unmatched aud
+            $verify_result = [
+                'is_valid' => false,
+                'error' => 'Invalid Access Token(Token Substitution)'
+            ];
+            return $verify_result;
         }
 
         // 有効期限の確認
         if ($decoded_payload['exp'] < time()) {
-            // invalid exp
-            return false;
+            // token expired
+            $verify_result = [
+                'is_valid' => false,
+                'error' => 'The ID Token expired'
+            ];
+            return $verify_result;
         }
 
         // 発行時刻の確認
         if ($decoded_payload['iat'] < time() - 600) {
             // invalid iat
-            return false;
+            $verify_result = [
+                'is_valid' => false,
+                'error' => 'Invalid iat'
+            ];
+            return $verify_result;
         }
 
-        return true;
+        $verify_result = [
+            'is_valid' => true,
+            'error' => null
+        ];
+        return $verify_result;
     }
 }

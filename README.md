@@ -71,5 +71,10 @@ if (!isset($_GET['code'])) {
 }
 ```
 
+## Testing
+```
+$ ./vendor/bin/phpunit
+```
+
 ## License
 The MIT License (MIT). Please see [License File](https://github.com/GNOffice/oauth2-yahoo-japan/blob/master/LICENSE) for more information.

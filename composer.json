@@ -1,5 +1,5 @@
 {
-  "name": "GNOffice/oauth2-yahoo-japan",
+  "name": "gn-office/oauth2-yahoo-japan",
   "description": "Yahoo Japan (Yconnect) OAuth 2.0 Client Provider for The PHP League OAuth2-Client",
   "license": "MIT",
   "authors": [

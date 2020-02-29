@@ -67,6 +67,26 @@ class YahooJapanResourceOwner implements ResourceOwnerInterface
     }
 
     /**
+     * Get resource owner nickname
+     *
+     * @return string|null
+     */
+    public function getNickname()
+    {
+        return $this->getValueByKey($this->response, 'nickname');
+    }
+
+    /**
+     * Get resource owner picture url
+     *
+     * @return string|null
+     */
+    public function getPicture()
+    {
+        return $this->getValueByKey($this->response, 'picture');
+    }
+
+    /**
      * Get resource owner email
      *
      * @return string|null

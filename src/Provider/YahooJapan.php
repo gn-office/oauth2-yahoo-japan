@@ -266,7 +266,7 @@ class YahooJapan extends AbstractProvider
      * @param string $nonce トークン取得時に設定した nonce
      * @return array $verify_result
      */
-    private function verifyToken($jwt, $access_token, $nonce)
+    protected function verifyToken($jwt, $access_token, $nonce)
     {
         // JWT を分割
         list($header, $payload, $signature) = explode('.', $jwt);

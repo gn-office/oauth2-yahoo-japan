@@ -48,15 +48,28 @@ if (!isset($_GET['code'])) {
     try {
         $accessToken = $provider->getAccessToken('authorization_code', [
             'code' => $_GET['code'],
-            'code_verifier' => $_SESSION['oauth2code_verifier'],
-            'nonce' => $_SESSION['oauth2nonce']
+            'code_verifier' => $_SESSION['oauth2code_verifier']
         ]);
 
-        // Get resource owner
-        $user = $provider->getResourceOwner($accessToken);
+        try {
+            $nonce = $_SESSION['oauth2nonce'];
 
-        // Use these details to create a new profile
-        printf('Hello %s!', $user->getName());
+            $token_values = $accessToken->getValues();
+            $id_token = $token_values['id_token'];
+            $access_token = $accessToken->getToken();
+
+            // Verify Token
+            $verify_token = $provider->verifyToken($id_token, $access_token, $nonce);
+
+            // Get resource owner
+            $user = $provider->getResourceOwner($accessToken);
+
+            // Use these details to create a new profile
+            printf('Hello %s!', $user->getName());
+
+        } catch (GNOffice\OAuth2\Client\Provider\Exception\InvalidTokenException $e) {
+            exit($e->getMessage());
+        }
 
     } catch (\League\OAuth2\Client\Provider\Exception\IdentityProviderException $e) {
 

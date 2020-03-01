@@ -154,37 +154,6 @@ class YahooJapan extends AbstractProvider
     }
 
     /**
-     * Requests an access token using a specified grant and option set.
-     *
-     * @param  mixed $grant
-     * @param  array $options
-     * @return \League\OAuth2\Client\Token\AccessTokenInterface
-     * @throws InvalidTokenException
-     */
-    public function getAccessToken($grant, array $options = [])
-    {
-        // nonce を取得
-        $nonce = $options['nonce'];
-        unset($options['nonce']);
-
-        // 親クラスでアクセストークンを取得
-        $token = parent::getAccessToken($grant, $options);
-
-        $token_values = $token->getValues();
-        $id_token = $token_values['id_token'];
-        $access_token = $token->getToken();
-
-        // アクセストークンを検証
-        $verify_token = $this->verifyToken($id_token, $access_token, $nonce);
-        if ($verify_token['is_valid']) {
-            return $token;
-        } else {
-            throw new InvalidTokenException($verify_token['error']);
-        }
-
-    }
-
-    /**
      * Generates a resource owner object from a successful resource owner
      * details request.
      *
@@ -264,9 +233,10 @@ class YahooJapan extends AbstractProvider
      * @param string $jwt 取得した ID Token(JWT)
      * @param string $access_token 取得したアクセストークン
      * @param string $nonce トークン取得時に設定した nonce
-     * @return array $verify_result
+     * @return void
+     * @throws InvalidTokenException
      */
-    protected function verifyToken($jwt, $access_token, $nonce)
+    public function verifyToken($jwt, $access_token, $nonce)
     {
         // JWT を分割
         list($header, $payload, $signature) = explode('.', $jwt);
@@ -290,21 +260,14 @@ class YahooJapan extends AbstractProvider
         $public_key_id = openssl_pkey_get_public($public_key);
         if (!$public_key_id) {
             // failed to get public key resource
-            $verify_result = [
-                'is_valid' => false,
-                'error' => 'Failed to get public key resource'
-            ];
-            return $verify_result;
+            $error = 'Failed to get public key resource';
+            throw new InvalidTokenException($error);
         }
         $result = openssl_verify($data, $decoded_signature, $public_key_id, 'RSA-SHA256');
         openssl_free_key($public_key_id);
         if ($result !== 1) {
-            // invalid signature
-            $verify_result = [
-                'is_valid' => false,
-                'error' => 'Invalid signature'
-            ];
-            return $verify_result;
+            $error = 'Invalid signature';
+            throw new InvalidTokenException($error);
         }
 
         // Payload の検証
@@ -314,66 +277,43 @@ class YahooJapan extends AbstractProvider
 
         if ($decoded_payload['iss'] !== $config['issuer']) {
             // unmatched iss
-            $verify_result = [
-                'is_valid' => false,
-                'error' => 'Unmatched iss'
-            ];
-            return $verify_result;
+            $error = 'Invalid IdToken Issuer';
+            throw new InvalidTokenException($error);
         }
 
         if ($decoded_payload['aud'][0] !== $this->clientId) {
             // unmatched aud
-            $verify_result = [
-                'is_valid' => false,
-                'error' => 'Unmatched aud'
-            ];
-            return $verify_result;
+            $error = 'Invalid IdToken Audience';
+            throw new InvalidTokenException($error);
         }
 
         if ($decoded_payload['nonce'] !== $nonce) {
             // unmatched nonce
-            $verify_result = [
-                'is_valid' => false,
-                'error' => 'Unmatched nonce'
-            ];
-            return $verify_result;
+            $error = 'Invalid IdToken Nonce';
+            throw new InvalidTokenException($error);
         }
 
         // アクセストークンの検証
         if ($decoded_payload['at_hash'] !== $this->generateHash($access_token)) {
             // invalid access_token
-            // unmatched aud
-            $verify_result = [
-                'is_valid' => false,
-                'error' => 'Invalid Access Token(Token Substitution)'
-            ];
-            return $verify_result;
+            $error = 'Invalid Access Token(Token Substitution)';
+            throw new InvalidTokenException($error);
         }
 
         // 有効期限の確認
         if ($decoded_payload['exp'] < time()) {
             // token expired
-            $verify_result = [
-                'is_valid' => false,
-                'error' => 'The ID Token expired'
-            ];
-            return $verify_result;
+            $error = 'IdToken expired';
+            throw new InvalidTokenException($error);
         }
 
         // 発行時刻の確認
         if ($decoded_payload['iat'] < time() - 600) {
             // invalid iat
-            $verify_result = [
-                'is_valid' => false,
-                'error' => 'Invalid iat'
-            ];
-            return $verify_result;
+            $error = 'Invalid IdToken Issued at';
+            throw new InvalidTokenException($error);
         }
 
-        $verify_result = [
-            'is_valid' => true,
-            'error' => null
-        ];
-        return $verify_result;
+        return;
     }
 }

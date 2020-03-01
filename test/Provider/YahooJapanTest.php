@@ -73,6 +73,31 @@ class YahooJapanTest extends TestCase
         $this->assertEquals('/yconnect/v2/authorization', $uri['path']);
     }
 
+    public function testGetAccessToken()
+    {
+        $discoveryResponse = m::mock('Psr\Http\Message\ResponseInterface');
+        $discoveryResponse->shouldReceive('getBody')->andReturn('{"authorization_endpoint":"mock_authorization_endpoint","token_endpoint":"token_endpoint_endpoint","userinfo_endpoint":"mock_userinfo_endpoint"}');
+        $discoveryResponse->shouldReceive('getHeader')->andReturn(['content-type' => 'json']);
+        $discoveryResponse->shouldReceive('getStatusCode')->andReturn(200);
+
+        $accessTokenResponse = m::mock('Psr\Http\Message\ResponseInterface');
+        $accessTokenResponse->shouldReceive('getBody')->andReturn('{"access_token": "mock_access_token", "token_type": "Bearer", "refresh_token": "mock_refresh_token", "expires_in": 3600, "id_token": "mock_id_token"}');
+        $accessTokenResponse->shouldReceive('getHeader')->andReturn(['content-type' => 'json']);
+        $accessTokenResponse->shouldReceive('getStatusCode')->andReturn(200);
+
+        $client = m::mock('GuzzleHttp\ClientInterface');
+        $client->shouldReceive('send')->times(2)->andReturn($discoveryResponse, $accessTokenResponse);
+        $this->provider->setHttpClient($client);
+        $token = $this->provider->getAccessToken('authorization_code', [
+            'code' => 'mock_authorization_code',
+            'code_verifier' => 'mock_oauth2code_verifier'
+        ]);
+        $this->assertEquals('mock_access_token', $token->getToken());
+        $this->assertLessThanOrEqual(time() + 3600, $token->getExpires());
+        $this->assertGreaterThanOrEqual(time(), $token->getExpires());
+        $this->assertEquals('mock_refresh_token', $token->getRefreshToken());
+    }
+
     public function testGetResourceOwnerDetails()
     {
         $id = uniqid();

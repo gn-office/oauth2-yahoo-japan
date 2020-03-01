@@ -2,14 +2,19 @@
 
 All notable changes to this publication will be documented in this file.
 
+## 1.1.0 - 2020-03-01
+
+- Change verifyToken() to public method.
+- Add test testGetAccessToken().
+
 ## 1.0.2 - 2020-02-29
 
-Delete unused files.
+- Delete unused files.
 
 ## 1.0.1 - 2020-02-29
 
-Edit composer.json to submit package to packagist.
+- Edit composer.json to submit package to packagist.
 
 ## 1.0.0 - 2020-02-29
 
-First release.
+- First release.
